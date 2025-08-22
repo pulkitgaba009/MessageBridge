@@ -10,15 +10,20 @@ st.title("📧 Bulk Email Sender using Excel (Personalized)")
 
 # --- Step 1: Upload Excel File ---
 st.header("Step 1: Upload Recipient List")
-uploaded_file = st.file_uploader("Upload Excel File with Name & Email columns", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload Excel File with Name, Email (and optional Company) columns", type=["xlsx"])
 
 recipients = []
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    if "Email" not in df.columns or "Name" not in df.columns:
-        st.error("❌ Excel file must have columns: 'Name' and 'Email'")
+    required_cols = {"Name", "Email"}
+    if not required_cols.issubset(df.columns):
+        st.error("❌ Excel file must have at least 'Name' and 'Email' columns.")
     else:
-        recipients = df[["Name", "Email"]].dropna().to_dict("records")
+        # Handle optional company column
+        if "Company" not in df.columns:
+            df["Company"] = ""  # Add empty if not provided
+
+        recipients = df[["Name", "Email", "Company"]].dropna(subset=["Email"]).to_dict("records")
         st.success(f"✅ Loaded {len(recipients)} recipient(s).")
         st.write(df)
 
@@ -32,7 +37,7 @@ if recipients:
 
     # Email Content
     subject = st.text_input("Email Subject")
-    message_template = st.text_area("Email Message (Use {name} for personalization)")
+    message_template = st.text_area("Email Message (Use {name} and {company} for personalization)")
     uploaded_image = st.file_uploader("Optional: Upload Image", type=["png", "jpg", "jpeg"])
 
     if st.button("🚀 Send Emails"):
@@ -51,11 +56,19 @@ if recipients:
                     status_text = st.empty()
 
                     for i, rec in enumerate(recipients):
-                        recipient_name = rec["Name"]
-                        recipient_email = rec["Email"]
+                        recipient_name = rec.get("Name", "")
+                        recipient_email = rec.get("Email", "")
+                        recipient_company = rec.get("Company", "")
 
-                        # Personalize message
-                        personalized_message = message_template.format(name=recipient_name)
+                        # Personalize message safely
+                        try:
+                            personalized_message = message_template.format(
+                                name=recipient_name,
+                                company=recipient_company
+                            )
+                        except KeyError:
+                            st.error("⚠️ Error: Please ensure you only use {name} and {company} placeholders.")
+                            break
 
                         msg = MIMEMultipart()
                         msg["From"] = sender_email
@@ -83,4 +96,3 @@ if recipients:
                 st.success(f"🎉 Personalized emails sent successfully to {len(recipients)} recipients!")
             except Exception as e:
                 st.error(f"⚠️ Error: {e}")
-
